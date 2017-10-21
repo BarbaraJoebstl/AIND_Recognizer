@@ -145,31 +145,40 @@ class SelectorDIC(ModelSelector):
     The log likelihood for any individual sample or group of samples can also be calculated with the score method.    
     '''
 
+    def calc_log_likelihood_other_words(self, model, other_words):
+        return [model[1].score(word[0], word[1]) for word in other_words]
+
+
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        best_num_states, best_dic = None, None 
-        #go through each model and calc
-        for num_states in range(self.min_n_components, self.max_n_components +1):
-            log_likelihood = self.base_model(num_states).score(self.X, self.lengths)
-            log_other = 0
-            words = list(self.wordk.keys())
-            words.remove(self.this_word)
+        other_words = []
+        all_models = []
+        all_dics = []
+        highest_dic = None
 
-            for w in words:
-                selector_other = ModelSelector(self.words, self.hwords, self.n_constant, self.min_n_components, self.max_n_components, self.random_state, self.verbose)
+        for w in self.words:
+            if w is not self.this_word:
+                other_words.append(self.hwords[w])
+        try:
+            for num_states in range(self.min_n_components, self.max_n_components +1):
+                hmm_model = self.base_model(num_states)
+                log_lHood_word = hmm_model.score(self.X, self.lengths)
+                all_models.append((log_lHood_word, hmm_model))
+        except Exception as e:
+            print (e)
+            pass         
 
-                log_other += selector_other.base_model(num_states).score(selector_other, len(selector_other))
+        for i, m in enumerate(all_models):
+            log_lHood_word, hmm_model = m
+            current_dic = log_lHood_word - np.mean(self.calc_log_likelihood_other_words(m, other_words))
+            all_dics.append((current_dic, m[1]))
 
-            current_dic = log_likelihood - log_other / (len(words) - 1)
-
-            if best_dic < current_dic:
-                best_dic, best_num_states = current_dic, num_states
-
-        if best_num_states is None:
-            return self.n_constant
+        if all_dics:
+            # find the best dic and return the related model
+            return max(all_dics, key = lambda x: x[0])[1]
         else:
-            return best_num_states
+            return None 
         
 
 
