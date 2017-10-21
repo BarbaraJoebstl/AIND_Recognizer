@@ -109,7 +109,7 @@ class SelectorBIC(ModelSelector):
                 current_bic = (-2 * log_lHood) + (free_params * np.log(sum_data_points))
 
             except Exception as e:
-                print (e)
+                #print (e)
                 pass 
 
         if lowest_bic is None:
@@ -166,7 +166,7 @@ class SelectorDIC(ModelSelector):
                 log_lHood_word = hmm_model.score(self.X, self.lengths)
                 all_models.append((log_lHood_word, hmm_model))
         except Exception as e:
-            print (e)
+            #print (e)
             pass         
 
         for i, m in enumerate(all_models):
@@ -227,7 +227,7 @@ class SelectorCV(ModelSelector):
                     best_model = hmm_model
                
             except Exception as e:
-                print (e)
+                #print (e)
                 pass
         # return max of list of lists comparing each item by value at index 0
         return best_model
