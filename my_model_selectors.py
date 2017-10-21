@@ -42,6 +42,7 @@ class ModelSelector(object):
                 print("model created for {} with {} states".format(self.this_word, num_states))
             return hmm_model
         except:
+            print("failure on {} with {} states".format(self.this_word, num_states))
             if self.verbose:
                 print("failure on {} with {} states".format(self.this_word, num_states))
             return None
@@ -57,8 +58,8 @@ class SelectorConstant(ModelSelector):
 
         :return: GaussianHMM object
         """
-        best_num_components = self.n_constant
-        return self.base_model(best_num_components)
+        best_num_states = self.n_constant
+        return self.base_model(best_num_states)
 
 
 class SelectorBIC(ModelSelector):
@@ -95,21 +96,21 @@ class SelectorBIC(ModelSelector):
 
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        best_num_components, lowest_bic = None, None
+        best_num_states, lowest_bic = None, None
         
         # go through each model and calc
-        for num_components in range(self.min_n_components, self.max_n_components + 1):
-            log_L = self.base_model(num_components, self.max_n_components + 1):
-            log_N = np.log(len(self.X))
-            p = num_components * (num_components -1) + 2 * len(self.X[0] *num_components)    
-            bic_current = -2 * log_L + p * log_N   
-            if lowest_bic > bic_current:
-                lowest_bic, best_num_components = bic_current, num_components
+        for num_states in range(self.min_n_components, self.max_n_components + 1):
+                log_L = self.base_model(num_states, self.max_n_components + 1)
+                log_N = np.log(len(self.X))
+                p = num_states * (num_states -1) + 2 * len(self.X[0] *num_states)    
+                bic_current = -2 * log_L + p * log_N   
+                if lowest_bic > bic_current:
+                    lowest_bic, best_num_states = bic_current, num_states
         
-        if best_num_components is None:
+        if best_num_states is None:
             return self.n_constant
         else:
-            return best_num_components
+            return best_num_states
     
 class SelectorDIC(ModelSelector):
     ''' select ***best*** model based on Discriminative Information Criterion
@@ -136,10 +137,10 @@ class SelectorDIC(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        best_num_components, best_dic = None, None 
+        best_num_states, best_dic = None, None 
         #go through each model and calc
-        for num_components in range(self.min_n_components, self.max_n_components +1):
-            log_likelihood = self.base_model(num_components).score(self.X, self.lengths)
+        for num_states in range(self.min_n_components, self.max_n_components +1):
+            log_likelihood = self.base_model(num_states).score(self.X, self.lengths)
             log_other = 0
             words = list(self.wordk.keys())
             words.remove(self.this_word)
@@ -147,17 +148,17 @@ class SelectorDIC(ModelSelector):
             for w in words:
                 selector_other = ModelSelector(self.words, self.hwords, self.n_constant, self.min_n_components, self.max_n_components, self.random_state, self.verbose)
 
-                log_other += selector_other.base_model(num_components).score(selector_other, len(selector_other))
+                log_other += selector_other.base_model(num_states).score(selector_other, len(selector_other))
 
             current_dic = log_likelihood - log_other / (len(words) - 1)
 
             if best_dic < current_dic:
-                best_dic, best_num_components = current_dic, num_components
+                best_dic, best_num_states = current_dic, num_states
 
-        if best_num_components is None:
+        if best_num_states is None:
             return self.n_constant
         else:
-            return best_num_components
+            return best_num_states
         
 
 
@@ -168,30 +169,48 @@ class SelectorCV(ModelSelector):
 
     In order to run hmmlearn training using the X,lengths tuples on the new folds, subsets must be combined based on the indices given for the folds. A helper utility has been provided in the asl_utils module named combine_sequences for this purpose.
     '''
-
+           
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        best_num_components, best_avg_log_L = None, None 
+        log_LHoods = []
+        current_score_cv = None
+        best_score_cv = None
+        best_model = None
 
         #go through each model and calc
-        for num_components in range(self.min_n_components, self.max_n_components +1):
-            sum_log_L = 0
-            count_log_L = 0
+        for num_states in range(self.min_n_components, self.max_n_components +1):
+            try:    
+                if len(self.sequences) > 2:
+                    split_method = KFold();
+                    for train_idx, test_idx in split_method.split(self.sequences):
+                        #Train
+                        self.X, self.lengths = combine_sequences(train_idx, self.sequences) 
+                        #Test
+                        X_test, length_test = combine_sequences(test_idx, self.sequences) 
+                        
+                        hmm_model = self.base_model(num_states)
+                        log_current_LHood = hmm_model.score(X_test, length_test)
+                else:
+                    hmm_model = self.base_model(num_states)
+                    log_current_LHood = hmm_model.score(self.X, self.lengths)
+                    
+                log_LHoods.append(log_current_LHood)
+                score_cv_avg = np.mean(log_LHoods)   
 
-            #default splits 3
-            split_method = KFold();
-                for cv_train_idx, cv_text_idx in split_method.split(self.sequences):
-                        X, length = combine_sequences(cv_train_idx, self.sequences) 
-                sum_log_L += self.base_model(num_components).score(X, lengths)
-                count_log_L += 1
+                if best_score_cv is None:
+                    return hmm_model
+                elif score_cv_avg is None:
+                    return hmm_model
+                elif score_cv_avg > best_score_cv:
+                    best_score_cv = current_score_cv
+                    best_model = hmm_model
+               
+            except Exception as e:
+                print (e)
+                pass
+        # return max of list of lists comparing each item by value at index 0
+        return best_model
 
-            if count_log_L > 0:
-                current_avg_log_L = sum_log_L/count_log_L
-                if best_avg_log_L, best_num_components = count_log_L, num_components
-
-        if best_num_components is None:
-            return self.n_constant
-        else:
-            return best_num_components
+            
 
