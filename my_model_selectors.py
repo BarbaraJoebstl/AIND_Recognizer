@@ -74,16 +74,14 @@ class SelectorBIC(ModelSelector):
     p: number of parameters (initial state prob, transition prob and emission prob or complexity)
     p * log N: creates penalty for bigger models to avoid overfitting
     N: number of data points
-
     """
-
     def select(self):
         """ select the best model for self.this_word based on
         BIC score for n between self.min_n_components and self.max_n_components
 
         :return: GaussianHMM object
         """
-        # compute BIC score for every model and keep the lowest BIC. If tow BIC s are equal take the one, with the lowest complexitiy
+        # compute BIC score for every model and keep the ***lowest*** BIC. If two BIC s are equal take the one, with the lowest complexitiy
 
         # get the numer of parameters:
         # Transition Matrix (rows sum up to one):
@@ -96,21 +94,34 @@ class SelectorBIC(ModelSelector):
 
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        best_num_states, lowest_bic = None, None
+        lowest_bic = None
+        best_model = None
         
         # go through each model and calc
         for num_states in range(self.min_n_components, self.max_n_components + 1):
-                log_L = self.base_model(num_states, self.max_n_components + 1)
-                log_N = np.log(len(self.X))
-                p = num_states * (num_states -1) + 2 * len(self.X[0] *num_states)    
-                bic_current = -2 * log_L + p * log_N   
-                if lowest_bic > bic_current:
-                    lowest_bic, best_num_states = bic_current, num_states
-        
-        if best_num_states is None:
-            return self.n_constant
+            try:
+                hmm_model = self.base_model(num_states)
+                log_lHood = hmm_model.score(self.X, self.lengths)
+                sum_data_points = sum(self.lengths)
+                
+                free_params = ( num_states ** 2 ) + ( 2 * num_states * sum_data_points ) - 1
+
+                current_bic = (-2 * log_lHood) + (free_params * np.log(sum_data_points))
+
+            except Exception as e:
+                print (e)
+                pass 
+
+        if lowest_bic is None:
+            return hmm_model
+        elif lowest_bic > current_bic:
+            lowest_bic = current_bic
+            best_model = hmm_model
+            
+        if best_model is None:
+            return hmm_model
         else:
-            return best_num_states
+            return best_model
     
 class SelectorDIC(ModelSelector):
     ''' select ***best*** model based on Discriminative Information Criterion
