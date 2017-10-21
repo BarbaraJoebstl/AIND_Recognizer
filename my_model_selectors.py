@@ -62,10 +62,18 @@ class SelectorConstant(ModelSelector):
 
 
 class SelectorBIC(ModelSelector):
-    """ select the model with the lowest Bayesian Information Criterion(BIC) score
-
+    """ select the model with the ***lowest*** Bayesian Information Criterion(BIC) score
     http://www2.imm.dtu.dk/courses/02433/doc/ch6_slides.pdf
-    Bayesian information criteria: BIC = -2 * logL + p * logN
+    
+    BIC = -2 * logL + p * logN
+
+    In the BIC equation, a penalty term penalizes complexity to avoid overfitting, so that it is not necessary to also use cross-validation in the selection process. 
+
+    L: likelihood of the fitted model
+    p: number of parameters (initial state prob, transition prob and emission prob or complexity)
+    p * log N: creates penalty for bigger models to avoid overfitting
+    N: number of data points
+
     """
 
     def select(self):
@@ -74,36 +82,116 @@ class SelectorBIC(ModelSelector):
 
         :return: GaussianHMM object
         """
+        # compute BIC score for every model and keep the lowest BIC. If tow BIC s are equal take the one, with the lowest complexitiy
+
+        # get the numer of parameters:
+        # Transition Matrix (rows sum up to one):
+        # params_tm = State * (State -1)
+
+        # Emission Matrix:
+        # params_em = 2 * number_states * number_features
+
+        # parameters = params_tm + params_em
+
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on BIC scores
-        raise NotImplementedError
-
-
+        best_num_components, lowest_bic = None, None
+        
+        # go through each model and calc
+        for num_components in range(self.min_n_components, self.max_n_components + 1):
+            log_L = self.base_model(num_components, self.max_n_components + 1):
+            log_N = np.log(len(self.X))
+            p = num_components * (num_components -1) + 2 * len(self.X[0] *num_components)    
+            bic_current = -2 * log_L + p * log_N   
+            if lowest_bic > bic_current:
+                lowest_bic, best_num_components = bic_current, num_components
+        
+        if best_num_components is None:
+            return self.n_constant
+        else:
+            return best_num_components
+    
 class SelectorDIC(ModelSelector):
-    ''' select best model based on Discriminative Information Criterion
+    ''' select ***best*** model based on Discriminative Information Criterion
 
     Biem, Alain. "A model selection criterion for classification: Application to hmm topology optimization."
     Document Analysis and Recognition, 2003. Proceedings. Seventh International Conference on. IEEE, 2003.
-    http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.58.6208&rep=rep1&type=pdf
     https://pdfs.semanticscholar.org/ed3d/7c4a5f607201f3848d4c02dd9ba17c791fc2.pdf
+    
+    DIC scores the discriminant ability of a training set for one word against competing words. Instead of a penalty term for complexity, it provides a penalty if model liklihoods for non-matching words are too similar to model likelihoods for the correct word in the word set.
+
     DIC = log(P(X(i)) - 1/(M-1)SUM(log(P(X(all but i))
+
+    or: 
+    DIC = log(P(word)) - average(log(P(other words)))
+
+    M: Model
+    X(i): currentWord
+    X: words (our training data)
+    log(P(X(i))): log likelihood for the fitted model of the current word
+
+    The log likelihood for any individual sample or group of samples can also be calculated with the score method.    
     '''
 
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        best_num_components, best_dic = None, None 
+        #go through each model and calc
+        for num_components in range(self.min_n_components, self.max_n_components +1):
+            log_likelihood = self.base_model(num_components).score(self.X, self.lengths)
+            log_other = 0
+            words = list(self.wordk.keys())
+            words.remove(self.this_word)
+
+            for w in words:
+                selector_other = ModelSelector(self.words, self.hwords, self.n_constant, self.min_n_components, self.max_n_components, self.random_state, self.verbose)
+
+                log_other += selector_other.base_model(num_components).score(selector_other, len(selector_other))
+
+            current_dic = log_likelihood - log_other / (len(words) - 1)
+
+            if best_dic < current_dic:
+                best_dic, best_num_components = current_dic, num_components
+
+        if best_num_components is None:
+            return self.n_constant
+        else:
+            return best_num_components
+        
 
 
 class SelectorCV(ModelSelector):
     ''' select best model based on average log Likelihood of cross-validation folds
 
+    return the ***max*** value of the average log Likelihood
+
+    In order to run hmmlearn training using the X,lengths tuples on the new folds, subsets must be combined based on the indices given for the folds. A helper utility has been provided in the asl_utils module named combine_sequences for this purpose.
     '''
 
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection using CV
-        raise NotImplementedError
+        best_num_components, best_avg_log_L = None, None 
+
+        #go through each model and calc
+        for num_components in range(self.min_n_components, self.max_n_components +1):
+            sum_log_L = 0
+            count_log_L = 0
+
+            #default splits 3
+            split_method = KFold();
+                for cv_train_idx, cv_text_idx in split_method.split(self.sequences):
+                        X, length = combine_sequences(cv_train_idx, self.sequences) 
+                sum_log_L += self.base_model(num_components).score(X, lengths)
+                count_log_L += 1
+
+            if count_log_L > 0:
+                current_avg_log_L = sum_log_L/count_log_L
+                if best_avg_log_L, best_num_components = count_log_L, num_components
+
+        if best_num_components is None:
+            return self.n_constant
+        else:
+            return best_num_components
+
