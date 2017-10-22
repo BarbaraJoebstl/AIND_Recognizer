@@ -114,9 +114,9 @@ class SelectorBIC(ModelSelector):
                 #print (e)
                 pass 
 
-        if lowest_bic > current_bic:
-            lowest_bic = current_bic
-            best_model = hmm_model
+            if lowest_bic > current_bic:
+                lowest_bic = current_bic
+                best_model = hmm_model
 
         return best_model
 
@@ -191,8 +191,8 @@ class SelectorCV(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         log_LHoods = []
-        best_score_cv = float('-inf')
-        score_cv_avg = float('-inf')
+        best_score_cv = None
+        score_cv_avg = None
         best_model = None
 
         #go through each model and calc
@@ -215,13 +215,17 @@ class SelectorCV(ModelSelector):
                 log_LHoods.append(log_current_LHood)
                 score_cv_avg = np.mean(log_LHoods)
 
-                if score_cv_avg > best_score_cv:
+                if best_score_cv is not None and score_cv_avg > best_score_cv:
                     best_score_cv = score_cv_avg
                     best_model = hmm_model
-               
+
+                if best_model is None:
+                    best_model = hmm_model
+
             except Exception as e:
                 #print (e)
                 pass
+
         return best_model
 
             
