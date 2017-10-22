@@ -1,6 +1,7 @@
 import warnings
 from asl_data import SinglesData
 
+
 def recognize(models: dict, test_set: SinglesData):
     """ Recognize test word sequences from word models set
 
@@ -16,12 +17,13 @@ def recognize(models: dict, test_set: SinglesData):
        guesses is a list of the best guess words ordered by the test set word_id
            ['WORDGUESS0', 'WORDGUESS1', 'WORDGUESS2',...]
    """
+
     warnings.filterwarnings("ignore", category=DeprecationWarning)
 
     probabilities = []
     guesses = []
 
-    for word_id in range(0, len( test_set.get_all_Xlengths())):
+    for word_id in range(0, len(test_set.get_all_Xlengths())):
         current_word, current_sequence_length = test_set.get_item_Xlengths(word_id)
         
         word_log_LHood = {}
@@ -39,5 +41,5 @@ def recognize(models: dict, test_set: SinglesData):
         #append guess with best score
         best_guess = max(word_log_LHood, key=word_log_LHood.get)
         guesses.append(best_guess)
-    
+
     return probabilities, guesses

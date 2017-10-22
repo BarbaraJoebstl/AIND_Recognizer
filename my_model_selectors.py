@@ -81,48 +81,46 @@ class SelectorBIC(ModelSelector):
 
         :return: GaussianHMM object
         """
-        # compute BIC score for every model and keep the ***lowest*** BIC. If two BIC s are equal take the one, with the lowest complexitiy
+        # compute BIC score for every model and keep the ***lowest*** BIC.
+        # If two BIC s are equal take the one, with the lowest complexitiy
 
-        # get the numer of parameters:
-        # Transition Matrix (rows sum up to one):
-        # params_tm = State * (State -1)
+        # "free parameters" are parameters learned by the model.
+        # m = num_components
+        # f = num_features
+        # The free transition probability parameters, is the size of the transmat matrix less one row,
+        # because they add up to 1 and therefore the final row is deterministic: m*(m-1)
+        # The free starting probabilities, which is the size of startprob minus 1 because it adds to 1.0 and last one can be calculated so m-1
+        # Number of means, which is m*f
+        # Number of covariances which is the size of the covars matrix, which for “diag” is m*f
 
-        # Emission Matrix:
-        # params_em = 2 * number_states * number_features
-
-        # parameters = params_tm + params_em
+        # free parameters = m^2 + 2*m*f - 1
 
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        lowest_bic = None
+        lowest_bic = float('inf')
+        current_bic = float('inf')
         best_model = None
         
         # go through each model and calc
-        for num_states in range(self.min_n_components, self.max_n_components + 1):
+        for num_comps in range(self.min_n_components, self.max_n_components + 1):
             try:
-                hmm_model = self.base_model(num_states)
+                hmm_model = self.base_model(num_comps)
                 log_lHood = hmm_model.score(self.X, self.lengths)
-                sum_data_points = sum(self.lengths)
-                
-                free_params = ( num_states ** 2 ) + ( 2 * num_states * sum_data_points ) - 1
 
-                current_bic = (-2 * log_lHood) + (free_params * np.log(sum_data_points))
+                free_params = (num_comps ** 2) + (2 * num_comps * hmm_model.n_features) - 1
+                current_bic = (-2 * log_lHood) + (free_params * np.log(hmm_model.n_features))
 
             except Exception as e:
                 #print (e)
                 pass 
 
-        if lowest_bic is None:
-            return hmm_model
-        elif lowest_bic > current_bic:
+        if lowest_bic > current_bic:
             lowest_bic = current_bic
             best_model = hmm_model
-            
-        if best_model is None:
-            return hmm_model
-        else:
-            return best_model
-    
+
+        return best_model
+
+
 class SelectorDIC(ModelSelector):
     ''' select ***best*** model based on Discriminative Information Criterion
 
@@ -181,7 +179,6 @@ class SelectorDIC(ModelSelector):
             return None 
         
 
-
 class SelectorCV(ModelSelector):
     ''' select best model based on average log Likelihood of cross-validation folds
 
@@ -194,8 +191,8 @@ class SelectorCV(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         log_LHoods = []
-        current_score_cv = None
-        best_score_cv = None
+        best_score_cv = float('-inf')
+        score_cv_avg = float('-inf')
         best_model = None
 
         #go through each model and calc
@@ -216,20 +213,15 @@ class SelectorCV(ModelSelector):
                     log_current_LHood = hmm_model.score(self.X, self.lengths)
                     
                 log_LHoods.append(log_current_LHood)
-                score_cv_avg = np.mean(log_LHoods)   
+                score_cv_avg = np.mean(log_LHoods)
 
-                if best_score_cv is None:
-                    return hmm_model
-                elif score_cv_avg is None:
-                    return hmm_model
-                elif score_cv_avg > best_score_cv:
-                    best_score_cv = current_score_cv
+                if score_cv_avg > best_score_cv:
+                    best_score_cv = score_cv_avg
                     best_model = hmm_model
                
             except Exception as e:
                 #print (e)
                 pass
-        # return max of list of lists comparing each item by value at index 0
         return best_model
 
             
